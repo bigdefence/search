@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 검색 챗봇</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+    <link href="./static/style.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <main class="main-content">
+            <div class="chat-container" id="chatMessages">
+                {% if query %}
+                    <div class="message user-message">
+                        {{ query }}
+                    </div>
+                    <div class="message bot-message">
+                        {{ response | safe }}
+                    </div>
+                {% endif %}
+            </div>
+            <div class="loading" id="loadingAnimation">
+                <div class="loading-dot"></div>
+                <div class="loading-dot"></div>
+                <div class="loading-dot"></div>
+            </div>
+            {% if image_results or video_results %}
+        <div class="media-section-container">
+          {% if image_results %}
+            <div class="media-section">
+              <div class="media-section-header" onclick="toggleSection('imageResults')">
+                <h3>관련 이미지</h3>
+                <i class="fas fa-chevron-down toggle-icon" id="imageResultsToggle"></i>
+              </div>
+              <div class="media-section-content" id="imageResults">
+                <div class="image-gallery">
+                  {% for result in image_results[:6] %}
+                    <div class="image-item">
+                      <a href="{{ result.link }}" target="_blank">
+                        <img src="{{ result.image }}" alt="{{ result.title }}" loading="lazy">
+                      </a>
+                      <p>{{ result.title }}</p>
+                    </div>
+                  {% endfor %}
+                </div>
+              </div>
+            </div>
+          {% endif %}
+
+          {% if video_results %}
+            <div class="media-section">
+              <div class="media-section-header" onclick="toggleSection('videoResults')">
+                <h3>관련 동영상</h3>
+                <i class="fas fa-chevron-down toggle-icon" id="videoResultsToggle"></i>
+              </div>
+              <div class="media-section-content" id="videoResults">
+                <div class="media-results">
+                  {% for result in video_results[:6] %}
+                    <div class="media-item video-result">
+                      <a href="{{ result.link }}" target="_blank">
+                        <img src="https://img.youtube.com/vi/{{ result.link.split('v=')[1] }}/0.jpg" alt="{{ result.title }}" loading="lazy">
+                      </a>
+                      <p>{{ result.title }}</p>
+                    </div>
+                  {% endfor %}
+                </div>
+              </div>
+            </div>
+          {% endif %}
+        </div>
+      {% endif %}
+            <footer class="input-area">
+                <form method="POST" id="chatForm">
+                    <div class="input-wrapper">
+                        <input type="text" name="query" placeholder="메시지를 입력하세요..." required>
+                        <select name="model" required>
+                            <option value="Gemini">Gemini</option>
+                            <option value="ChatGPT">ChatGPT</option>
+                        </select>
+                        <button type="submit"><i class="fas fa-paper-plane"></i></button>
+                    </div>
+                </form>
+            </footer>
+            <div class="trends">
+                <h2>실시간 인기 검색어</h2>
+                <div id="trendsContainer">
+                    <div id="trendsLoading">로딩 중...</div>
+                    <ul id="googleTrendsList"></ul>
+                </div>
+            </div>
+        </main>
+        <aside class="search-results">
+      <h2>검색 결과</h2>
+      <div class="results-container">
+        {% if search_results %}
+          {% for result in search_results %}
+            <div class="result">
+              <h3><a href="{{ result.link }}" target="_blank" onclick="recordClick('{{ result.link }}')">{{ result.title | safe }}</a></h3>
+              <p>{{ result.snippet | safe }}</p>
+            </div>
+          {% endfor %}
+        {% else %}
+          <p class="no-results">검색 결과가 없습니다.</p>
+        {% endif %}
+      </div>
+    </aside>
+    </div>
+    <script>
+        function toggleSection(id) {
+      const section = document.getElementById(id);
+      const toggleIcon = document.getElementById(id + 'Toggle');
+      if (section.style.maxHeight) {
+        section.style.maxHeight = null;
+        toggleIcon.style.transform = 'rotate(0deg)';
+      } else {
+        section.style.maxHeight = section.scrollHeight + 'px';
+        toggleIcon.style.transform = 'rotate(180deg)';
+      }
+    }
+        document.getElementById('chatForm').addEventListener('submit', function(e) {
+            document.getElementById('loadingAnimation').style.display = 'flex';
+        });
+
+        function convertMarkdownToHtml(text) {
+            return text
+                .replace(/### (.+)/g, '<h3>$1</h3>')
+                .replace(/## (.+)/g, '<h2>$1</h2>')
+                .replace(/# (.+)/g, '<h2>$1</h2>')
+                .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.+?)\*/g, '<em>$1</em>')
+                .replace(/`(.+?)`/g, '<code>$1</code>')
+                .replace(/- (.+)/g, '<li>$1</li>')
+                .replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>')
+                .replace(/\n/g, '<br>');
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const responseElements = document.querySelectorAll('.bot-message');
+            responseElements.forEach(el => {
+                el.innerHTML = convertMarkdownToHtml(el.innerHTML);
+            });
+
+            fetchTrends();
+            setInterval(fetchTrends, 60000);
+        });
+
+        let lastUpdateTime = 0;
+
+        function fetchTrends() {
+            console.log('Fetching trends...');
+            const now = Date.now();
+            if (now - lastUpdateTime < 60000) {
+                console.log('Skipping fetch, last update was less than 1 minute ago');
+                return;
+            }
+
+            fetch('/fetch_trends')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    console.log('Received trends data:', data);
+                    updateTrends(data);
+                    lastUpdateTime = now;
+                })
+                .catch(error => {
+                    console.error('Error fetching trends:', error);
+                    showErrorMessage();
+                });
+        }
+
+        function updateTrends(data) {
+            const googleTrendsList = document.getElementById('googleTrendsList');
+            const loadingElement = document.getElementById('trendsLoading');
+
+            if (!data || !data.google_trends || data.google_trends.length === 0) {
+                showErrorMessage();
+                return;
+            }
+
+            loadingElement.style.display = 'none';
+            googleTrendsList.style.display = 'grid';
+
+            // 상위 10개 항목만 표시
+            const topTrends = data.google_trends.slice(0, 10);
+
+            googleTrendsList.innerHTML = topTrends.map((trend, index) => `
+                <li>
+                    <a href="${trend.url}" target="_blank" title="${trend.title}">
+                        <span class="trend-rank">${index + 1}</span>
+                        <span class="trend-title">${trend.title}</span>
+                        ${trend.isNew ? '<span class="trend-new">N</span>' : ''}
+                        <span class="trend-change ${getTrendChangeClass(trend.change)}">
+                            ${getTrendChangeIcon(trend.change)}
+                        </span>
+                    </a>
+                </li>`).join('');
+        }
+
+        function showErrorMessage() {
+            const googleTrendsList = document.getElementById('googleTrendsList');
+            const loadingElement = document.getElementById('trendsLoading');
+
+            loadingElement.style.display = 'none';
+            googleTrendsList.style.display = 'block';
+            googleTrendsList.innerHTML = '<li>트렌드를 가져오는 중 오류가 발생했습니다.</li>';
+        }
+
+        function getTrendChangeClass(change) {
+            if (change > 0) return 'trend-up';
+            if (change < 0) return 'trend-down';
+            return 'trend-same';
+        }
+
+        function getTrendChangeIcon(change) {
+            if (change > 0) return '▲';
+            if (change < 0) return '▼';
+            return '-';
+        }
+        function recordClick(url) {
+            fetch('/record_click', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ url: url })
+            });
+        }
+        document.addEventListener('DOMContentLoaded', function() {
+      const responseElements = document.querySelectorAll('.bot-message:not(.media-section)');
+      responseElements.forEach(el => {
+        // 이미지나 비디오 결과가 포함된 미디어 섹션을 제외한 나머지에만 적용
+        if (!el.closest('.media-section')) {
+          el.innerHTML = convertMarkdownToHtml(el.innerHTML);
+        }
+      });
+    });
+    </script>
+</body>

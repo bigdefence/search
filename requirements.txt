@@ -1,0 +1,13 @@
+flask
+google-api-python-client
+openai
+python-dotenv
+google.generativeai
+requests
+bs4
+nltk
+scikit-learn
+transformers
+torch
+sentence-transformers
+faiss-cpu
