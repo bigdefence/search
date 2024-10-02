@@ -37,8 +37,8 @@
 
 1. 리포지토리 클론:
    ```bash
-   git clone https://github.com/your-repo/ai-powered-search.git
-   cd ai-powered-search
+   git clone https://github.com/bigdefence/search.git
+   cd search
 2. 필요한 Python 패키지 설치:
    ```bash
    pip install -r requirements.txt
