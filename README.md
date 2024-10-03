@@ -61,7 +61,7 @@
    python main-app.py
 - ElasticSearch 버전 Flask 서버 시작:
   ```bash
-  python main-app-elastic.py
+  python main-app-elasticsearch.py
 - 웹 브라우저를 열고 http://127.0.0.1:5000에 접속
 - 검색어를 입력하고 응답 모델로 ChatGPT 또는 Gemini를 선택한 후 "검색" 버튼 클릭
 - 검색 결과와 함께 AI 생성 응답 확인
