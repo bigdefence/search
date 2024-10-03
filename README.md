@@ -1,16 +1,16 @@
 # AI 기반 검색 엔진
 
 ## 프로젝트 개요
-이 프로젝트는 Flask 기반의 웹 애플리케이션으로, OpenAI와 Gemini AI 모델을 활용한 AI 검색 엔진입니다. 사용자는 검색어를 입력하면, Google 및 Naver의 검색 결과를 실시간으로 받아와 AI 모델을 통해 종합적인 답변을 제공합니다. 자연어 처리, BM25, FAISS, Sentence Transformer를 결합하여 검색 결과를 분석하고, 클릭 데이터를 기반으로 결과를 최적화합니다.
+이 프로젝트는 Flask 기반의 웹 애플리케이션으로, OpenAI와 Gemini AI 모델을 활용한 AI 검색 엔진입니다. 사용자는 검색어를 입력하면, Google 및 Naver의 검색 결과를 실시간으로 받아와 AI 모델을 통해 종합적인 답변을 제공합니다. 자연어 처리, BM25, FAISS, ElasticSearch,Sentence Transformer를 결합하여 검색 결과를 분석하고, 클릭 데이터를 기반으로 결과를 최적화합니다.
 
 ## 주요 기능
 - **다양한 검색 소스 통합**: Google과 Naver의 텍스트, 이미지, 비디오 검색 결과를 가져옵니다.
 - **AI 모델 기반 답변 생성**: ChatGPT(OpenAI)와 Gemini AI 모델을 선택하여, 검색 결과를 기반으로 종합적이고 인사이트를 제공하는 답변을 생성합니다.
-- **시맨틱 검색**: BM25 알고리즘과 Sentence Transformer 모델을 결합하여 검색 결과의 관련성을 평가합니다.
+- **정보 검색**: BM25 알고리즘과 Sentence Transformer 모델을 결합하여 검색 결과의 관련성을 평가합니다.
 - **클릭 추적 기능**: 사용자가 클릭한 검색 결과를 추적하여, 자주 클릭된 링크의 중요도를 높입니다.
 - **Google 트렌드 표시**: 실시간으로 한국에서 인기 있는 검색어를 보여줍니다.
 - **한국어 지원**: 한국어 검색 결과와 불용어 처리를 위한 `konlpy`와 `Okt` 사용.
-
+- **Elasticsearch 통합**: Elasticsearch를 사용하여 대규모 데이터셋에 대한 색인 및 검색 기능을 제공합니다. 기존의 BM25 및 FAISS 기반 검색을 대체하여 더욱 높은 성능과 빠른 검색 결과를 제공합니다. Elasticsearch를 사용한 버전에서는 분산 환경에서의 고성능 검색이 가능하며, 대규모 데이터에 최적화된 검색 및 필터링 기능을 갖추고 있습니다.
 ## 요구 사항
 - Python 3.8+
 - Flask 2.0+
@@ -32,7 +32,7 @@
 - `readability`
 - `googleapiclient`
 - `dotenv`
-
+- `elasticsearch`
 ## 설치 방법
 
 1. 리포지토리 클론:
@@ -56,12 +56,15 @@
 
 ## 사용 방법
 
-1. Flask 개발 서버 시작:
+- BM25와 Faiss 버전 Flask 서버 시작:
    ```bash
    python main-app.py
-2. 웹 브라우저를 열고 http://127.0.0.1:5000에 접속
-3. 검색어를 입력하고 응답 모델로 ChatGPT 또는 Gemini를 선택한 후 "검색" 버튼 클릭
-4. 검색 결과와 함께 AI 생성 응답 확인
+- ElasticSearch 버전 Flask 서버 시작:
+  ```bash
+  python main-app-elastic.py
+- 웹 브라우저를 열고 http://127.0.0.1:5000에 접속
+- 검색어를 입력하고 응답 모델로 ChatGPT 또는 Gemini를 선택한 후 "검색" 버튼 클릭
+- 검색 결과와 함께 AI 생성 응답 확인
 
 ## 트렌드 가져오기
 - 홈페이지에서 Google 한국의 실시간 트렌드 표시
