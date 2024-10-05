@@ -4,49 +4,202 @@ import aiohttp
 from bs4 import BeautifulSoup
 from readability import Document
 import requests
-from rank_bm25 import BM25Okapi
-import nltk
-import faiss
-import numpy as np
 from sentence_transformers import SentenceTransformer
 from utils.config import GOOGLE_API_KEY, CSE_ID, NAVER_CLIENT_ID, NAVER_CLIENT_SECRET, YOUTUBE_API_KEY
 from utils.database import get_click_count
 from utils.text_processing import preprocess_text
-from elasticsearch import Elasticsearch, helpers
+from elasticsearch import AsyncElasticsearch, helpers, exceptions
+from datetime import datetime
 
 youtube = build('youtube', 'v3', developerKey=YOUTUBE_API_KEY)
 sentence_transformer = SentenceTransformer('distilbert-base-nli-mean-tokens')
 
-es = Elasticsearch(
-    [{'host': 'localhost', 'port': 9200, 'scheme': 'http'}],
-    request_timeout=30,
-    max_retries=10,
-    retry_on_timeout=True
-)
-def create_index_if_not_exists():
+es = None
+
+async def get_es_connection():
+    global es
+    for _ in range(3):  # Try connecting 3 times
+        try:
+            es = AsyncElasticsearch([{'host': 'localhost', 'port': 9200, 'scheme': 'http'}],
+                                    request_timeout=30,
+                                    max_retries=10,
+                                    retry_on_timeout=True)
+            if await es.ping():
+                print("Elasticsearch에 연결되었습니다.")
+                return es
+        except exceptions.ConnectionError:
+            print("연결 실패, 다시 시도 중...")
+        await asyncio.sleep(1)  # 재시도 전 잠시 대기
+    print("Elasticsearch 연결 실패")
+    return None
+
+async def initialize_es():
+    global es
+    es = await get_es_connection()
+
+# 초기화 함수는 여기서 호출하지 않습니다.
+# asyncio.run(initialize_es())
+
+async def create_index_if_not_exists():
+    index_name = "search_results"
+    index_body = {
+        "settings": {
+            "number_of_shards": 1,
+            "number_of_replicas": 0,
+            "analysis": {
+                "analyzer": {
+                    "korean": {
+                        "type": "custom",
+                        "tokenizer": "nori_tokenizer",
+                        "filter": ["lowercase", "nori_readingform", "nori_number"]
+                    }
+                }
+            }
+        },
+        "mappings": {
+            "properties": {
+                "title": {"type": "text", "analyzer": "korean"},
+                "content": {"type": "text", "analyzer": "korean"},
+                "snippet": {"type": "text", "analyzer": "korean"},
+                "link": {"type": "keyword"},
+                "image": {"type": "keyword"},
+                "source": {"type": "keyword"},
+                "timestamp": {"type": "date"},
+                "click_count": {"type": "integer"},
+                "embedding": {"type": "dense_vector", "dims": 768}
+            }
+        }
+    }
     try:
-        if not es.indices.exists(index="search_results"):
-            es.indices.create(index="search_results")
-            print("Index 'search_results' created successfully")
+        if not await es.indices.exists(index=index_name):
+            await es.indices.create(index=index_name, body=index_body)
+            print(f"Index '{index_name}' created successfully")
         else:
-            print("Index 'search_results' already exists")
+            print(f"Index '{index_name}' already exists")
     except Exception as e:
         print(f"Error creating index: {e}")
 
 async def index_search_results_async(search_results):
+    global es
+    if es is None:
+        print("Elasticsearch 연결이 설정되지 않았습니다.")
+        return
     try:
-        actions = [
-            {
-                "_index": "search_results",
-                "_id": result['link'],
-                "_source": result
+        actions = [{
+            "_index": "search_results",
+            "_id": result['link'],
+            "_source": {
+                **result,
+                "timestamp": datetime.now().isoformat(),
+                "click_count": get_click_count(result['link']),
+                "embedding": sentence_transformer.encode(result.get('content', result.get('snippet', ''))).tolist()
             }
-            for result in search_results
-        ]
-        await asyncio.to_thread(helpers.bulk, es, actions)
+        } for result in search_results]
+        
+        await es.bulk(actions)
     except Exception as e:
         print(f"Elasticsearch indexing error: {e}")
-        pass
+
+async def elasticsearch_search(query, size=20):
+    global es
+    if es is None:
+        print("Elasticsearch 연결이 설정되지 않았습니다.")
+        return []
+    try:
+        query_embedding = sentence_transformer.encode(query).tolist()
+        
+        search_body = {
+            "size": size,
+            "query": {
+                "script_score": {
+                    "query": {
+                        "bool": {
+                            "should": [
+                                {"match": {"title": query}},
+                                {"match": {"content": query}},
+                                {"match": {"snippet": query}}
+                            ]
+                        }
+                    },
+                    "script": {
+                        "source": "cosineSimilarity(params.query_vector, 'embedding') + log1p(doc['click_count'].value) + 1.0 / (1.0 + doc['timestamp'].value.getMillis() - params.now)",
+                        "params": {
+                            "query_vector": query_embedding,
+                            "now": datetime.now().timestamp() * 1000
+                        }
+                    }
+                }
+            }
+        }
+        
+        response = await es.search(index="search_results", body=search_body)
+        return [hit['_source'] for hit in response['hits']['hits']]
+    except Exception as e:
+        print(f"Elasticsearch search error: {e}")
+        return []
+
+async def fetch_search_results(search_func, *args, **kwargs):
+    try:
+        return await search_func(*args, **kwargs)
+    except Exception as e:
+        print(f"{search_func.__name__} Error: {e}")
+        return []
+
+async def fetch_all_search_results(query):
+    num_results = 10
+    search_tasks = [
+        fetch_search_results(google_search, query, GOOGLE_API_KEY, CSE_ID, num_results),
+        fetch_search_results(google_search, query, GOOGLE_API_KEY, CSE_ID, num_results, search_type="image"),
+        fetch_search_results(naver_search, query, num_results),
+        fetch_search_results(naver_search, query, num_results, search_type="image"),
+        fetch_search_results(youtube_search, query)
+    ]
+    
+    results = await asyncio.gather(*search_tasks)
+    
+    text_results = results[0] + results[2]
+    image_results = results[1] + results[3]
+    video_results = results[4]
+    
+    all_results = text_results + image_results + video_results
+    
+    await index_search_results_async(all_results)
+    es_results = await elasticsearch_search(query)
+    
+    return es_results, image_results, video_results
+
+async def fetch_content_async(url):
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=10) as response:
+                html = await response.text()
+                doc = Document(html)
+                article_content = doc.summary()
+                
+                soup = BeautifulSoup(article_content, 'html.parser')
+                for script in soup(["script", "style"]):
+                    script.decompose()
+                text = soup.get_text()
+                lines = (line.strip() for line in text.splitlines())
+                chunks = (phrase.strip() for line in lines for phrase in line.split(" "))
+                return ' '.join(chunk for chunk in chunks if chunk)[:5000]
+    except Exception as e:
+        print(f"Error fetching content from {url}: {e}")
+        return ""
+
+async def fetch_and_process_content(search_results):
+    tasks = [fetch_content_async(result['link']) for result in search_results]
+    contents = await asyncio.gather(*tasks)
+    
+    for result, content in zip(search_results, contents):
+        if content:
+            result['content'] = content
+            result['preprocessed_content'] = preprocess_text(content)
+        else:
+            result['content'] = result.get('snippet', '')
+            result['preprocessed_content'] = preprocess_text(result.get('snippet', ''))
+    
+    return search_results
 async def google_search(query, api_key, cse_id, num_results=10, search_type=None):
     try:
         service = build("customsearch", "v1", developerKey=api_key)
@@ -119,99 +272,3 @@ async def youtube_search(query, max_results=3):
     except Exception as e:
         print(f"YouTube Search Error: {e}")
         return []
-
-async def fetch_all_search_results(query):
-    num_results_google = 10
-    num_results_naver = 10
-
-    google_text_task = google_search(query, GOOGLE_API_KEY, CSE_ID, num_results=num_results_google)
-    google_image_task = google_search(query, GOOGLE_API_KEY, CSE_ID, num_results=num_results_google, search_type="image")
-    
-    naver_text_task = naver_search(query, num_results=num_results_naver)
-    naver_image_task = naver_search(query, num_results=num_results_naver, search_type="image")
-    
-    youtube_task = youtube_search(query)
-    
-    google_text, google_images, naver_text, naver_images, youtube_videos = await asyncio.gather(
-        google_text_task, google_image_task,
-        naver_text_task, naver_image_task,
-        youtube_task
-    )
-    
-    text_results = google_text + naver_text
-    image_results = google_images + naver_images
-    video_results = youtube_videos
-    
-    # Elasticsearch에 검색 결과 인덱싱
-    await index_search_results_async(text_results + image_results + video_results)
-    
-    return text_results, image_results, video_results
-
-
-async def fetch_content_async(url):
-    try:
-        # requests를 사용하여 웹 페이지 콘텐츠 가져오기
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()  # 오류 발생 시 예외 발생
-
-        # readability를 사용하여 기사 본문 추출
-        doc = Document(response.text)
-        article_content = doc.summary()
-
-        soup = BeautifulSoup(article_content, 'html.parser')
-        for script in soup(["script", "style"]):
-            script.decompose()
-        text = soup.get_text()
-        lines = (line.strip() for line in text.splitlines())
-        chunks = (phrase.strip() for line in lines for phrase in line.split(" "))
-        return ' '.join(chunk for chunk in chunks if chunk)[:5000]
-
-    except Exception as e:
-        print(f"Error fetching content from {url}: {e}")
-        return ""
-
-
-async def fetch_and_process_content(search_results):
-    tasks = [fetch_content_async(result['link']) for result in search_results]
-    contents = await asyncio.gather(*tasks)
-    
-    for i, content in enumerate(contents):
-        if content:
-            search_results[i]['content'] = content
-            search_results[i]['preprocessed_content'] = preprocess_text(content)
-        else:
-            search_results[i]['content'] = search_results[i].get('snippet', '')
-            search_results[i]['preprocessed_content'] = preprocess_text(search_results[i].get('snippet', ''))
-    
-    return search_results
-
-def semantic_search_with_click_data(query, search_results):
-    query_embedding = sentence_transformer.encode([query])[0]
-    
-    result_embeddings = []
-    for result in search_results:
-        content = result.get('preprocessed_content', '')
-        if content:
-            embedding = sentence_transformer.encode([content])[0]
-            result_embeddings.append(embedding)
-        else:
-            result_embeddings.append(np.zeros(query_embedding.shape))
-    
-    similarities = np.dot(result_embeddings, query_embedding)
-    
-    click_weights = []
-    for result in search_results:
-        url = result['link']
-        click_count = get_click_count(url)
-        click_weight = np.log1p(click_count)  # 로그 스케일 적용
-        click_weights.append(click_weight)
-    
-    click_weights = np.array(click_weights)
-    max_click_weight = np.max(click_weights) if np.max(click_weights) > 0 else 1
-    normalized_click_weights = click_weights / max_click_weight
-    
-    combined_scores = 0.9 * similarities + 0.1 * normalized_click_weights
-    
-    top_indices = np.argsort(combined_scores)[::-1]
-    
-    return top_indices

@@ -4,7 +4,7 @@ from utils.config import OPENAI_API_KEY, GEMINI_API_KEY
 
 openai.api_key = OPENAI_API_KEY
 genai.configure(api_key=GEMINI_API_KEY)
-gemini_model = genai.GenerativeModel('gemini-1.5-pro-002')
+gemini_model = genai.GenerativeModel('gemini-1.5-flash-002')
 
 def chatgpt_query(prompt, query):
     try:

@@ -23,7 +23,7 @@ async def google_search(query, api_key, cse_id, num_results=10, search_type=None
             'q': query,
             'cx': cse_id,
             'num': num_results,
-            'dateRestrict': 'd30'
+            'dateRestrict': 'd7'
         }
         
         if search_type == "image":
@@ -130,7 +130,7 @@ async def fetch_content_async(url):
         text = soup.get_text()
         lines = (line.strip() for line in text.splitlines())
         chunks = (phrase.strip() for line in lines for phrase in line.split(" "))
-        return ' '.join(chunk for chunk in chunks if chunk)[:5000]
+        return ' '.join(chunk for chunk in chunks if chunk)[:2000]
 
     except Exception as e:
         print(f"Error fetching content from {url}: {e}")
@@ -165,8 +165,7 @@ def bm25_search_with_sentence_transformer(query, search_results, top_k=10):
     doc_scores = bm25.get_scores(query_tokens)
     
     weighted_scores = [score * get_click_weight(result['link']) for score, result in zip(doc_scores, search_results)]
-    top_indices = np.argsort(weighted_scores)[::-1][:top_k]
-    return top_indices
+    return weighted_scores
 
 def faiss_search(query, search_results, top_k=10):
     query_embedding = sentence_transformer.encode([query])
@@ -177,18 +176,20 @@ def faiss_search(query, search_results, top_k=10):
     index.add(np.array(document_embeddings))
     
     distances, indices = index.search(np.array(query_embedding), top_k)
-    return indices[0]
+    return -distances[0]  # Negative distances to convert to scores (higher is better)
 
 def combined_search(query, search_results, top_k=10):
-    bm25_indices = bm25_search_with_sentence_transformer(query, search_results, top_k)
-    faiss_indices = faiss_search(query, search_results, top_k)
-
-    combined_indices = np.intersect1d(bm25_indices, faiss_indices)
+    bm25_scores = bm25_search_with_sentence_transformer(query, search_results, len(search_results))
+    faiss_scores = faiss_search(query, search_results, len(search_results))
     
-    if len(combined_indices) < top_k:
-        combined_indices = np.concatenate([combined_indices, bm25_indices, faiss_indices])[:top_k]
+    # Normalize scores
+    bm25_scores = (bm25_scores - np.min(bm25_scores)) / (np.max(bm25_scores) - np.min(bm25_scores))
+    faiss_scores = (faiss_scores - np.min(faiss_scores)) / (np.max(faiss_scores) - np.min(faiss_scores))
     
-    return combined_indices
+    # Combine scores with weights
+    combined_scores = 0.35 * bm25_scores + 0.65 * faiss_scores
+    top_indices = np.argsort(combined_scores)[::-1][:top_k]
+    return top_indices
 
 def semantic_search_with_click_data(query, search_results, top_k=10):
     combined_indices = combined_search(query, search_results, top_k)
