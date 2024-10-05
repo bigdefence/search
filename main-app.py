@@ -29,13 +29,12 @@ def index():
         processed_text_results = asyncio.run(fetch_and_process_content(text_results))
 
         top_indices = semantic_search_with_click_data(optimized_query,processed_text_results)
-        
+        print(top_indices)
         prompt = f"Search results:\n"
         for i, index in enumerate(top_indices, 1):
             result = processed_text_results[index]
             result_text = (
                 f"{i}. Title: {result.get('title', 'No Title')}\n"
-                f"Summary: {result.get('snippet', 'No Summary')}\n"
                 f"Source: {result.get('source', 'Unknown')}\n"
                 f"Content: {result.get('content', 'No Content')[:2000]}\n\n"
             )
