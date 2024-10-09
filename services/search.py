@@ -14,7 +14,7 @@ from utils.database import get_click_weight
 from utils.text_processing import preprocess_text
 
 youtube = build('youtube', 'v3', developerKey=YOUTUBE_API_KEY)
-sentence_transformer = SentenceTransformer('distilbert-base-nli-mean-tokens')
+sentence_transformer = SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
 
 async def google_search(query, api_key, cse_id, num_results=10, search_type=None):
     try:
@@ -187,10 +187,10 @@ def combined_search(query, search_results, top_k=10):
     faiss_scores = (faiss_scores - np.min(faiss_scores)) / (np.max(faiss_scores) - np.min(faiss_scores))
     
     # Combine scores with weights
-    combined_scores = 0.35 * bm25_scores + 0.65 * faiss_scores
+    combined_scores = 0.2 * bm25_scores + 0.8 * faiss_scores
     top_indices = np.argsort(combined_scores)[::-1][:top_k]
     return top_indices
 
-def semantic_search_with_click_data(query, search_results, top_k=10):
+def semantic_search_with_click_data(query, search_results, top_k=8):
     combined_indices = combined_search(query, search_results, top_k)
     return combined_indices
