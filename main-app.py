@@ -29,7 +29,6 @@ def index():
         processed_text_results = asyncio.run(fetch_and_process_content(text_results))
 
         top_indices = semantic_search_with_click_data(optimized_query,processed_text_results)
-        print(top_indices)
         prompt = f"Search results:\n"
         for i, index in enumerate(top_indices, 1):
             result = processed_text_results[index]
@@ -41,21 +40,20 @@ def index():
             prompt += result_text
 
         display_results = []
-        for i, index in enumerate(top_indices[:10], 1):
+        for i, index in enumerate(top_indices[:8], 1):
             result = processed_text_results[index]
             display_results.append({
                 'title': result.get('title', 'No Title'),
                 'snippet': result.get('snippet', 'No Snippet')[:200] + '...' if len(result.get('snippet', '')) > 200 else result.get('snippet', 'No Snippet'),
                 'link': result.get('link', 'No Link'),
             })
-
         def generate():
             ai_response = ""
             if model_choice == 'ChatGPT':
                 for chunk in chatgpt_query(prompt, optimized_query):
                     ai_response += chunk
                     yield chunk
-            else:
+            elif model_choice == 'Gemini':
                 for chunk in gemini_query(prompt, optimized_query):
                     ai_response += chunk
                     yield chunk
