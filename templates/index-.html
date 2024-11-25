@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 검색 챗봇</title>
+    <!-- 스타일 및 폰트 로드 -->
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- Font Awesome CDN -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+    <style>
+        /* 공통 스타일 */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Roboto', sans-serif;
+        }
+
+        body {
+            background-color: #1F2937;
+            color: #D1D5DB;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .app-container {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* 사이드바 스타일 */
+        .sidebar {
+            background-color: #111827;
+            border-right: 1px solid #374151;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        .sidebar-section {
+            margin-bottom: 30px;
+        }
+
+        .sidebar-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #9CA3AF;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .media-grid {
+            display: grid;
+            gap: 16px;
+            grid-template-columns: repeat(2, 1fr);
+        }
+
+        .media-item {
+            width: 100%;
+            position: relative;
+            overflow: hidden;
+            border-radius: 12px;
+            background: #374151;
+        }
+
+        .media-item img {
+            width: 100%;
+            height: auto;
+            display: block;
+            transition: transform 0.3s;
+        }
+
+        .media-item img:hover {
+            transform: scale(1.05);
+        }
+
+        .media-item a {
+            display: block;
+            height: 100%;
+        }
+
+        /* 메인 콘텐츠 스타일 */
+        .main-content {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .header {
+            text-align: center;
+            padding: 20px;
+            background: #111827;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            flex-shrink: 0;
+        }
+
+        .header h1 {
+            font-size: 24px;
+            color: #D1D5DB;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .chat-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            background: #1F2937;
+        }
+
+        .message {
+            max-width: 800px;
+            margin: 10px auto;
+            padding: 15px 20px;
+            border-radius: 12px;
+            width: 100%;
+            animation: fadeIn 0.3s ease-out;
+            line-height: 1.2;
+            white-space: pre-wrap;
+            word-break: break-word;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .user-message {
+            background: #4F46E5;
+            margin-left: auto;
+            max-width: 80%;
+            color: #F9FAFB;
+        }
+
+        .ai-message {
+            background: #374151;
+            margin-right: auto;
+            max-width: 80%;
+            color: #F3F4F6;
+        }
+
+        .input-container {
+            background: #111827;
+            padding: 20px;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.3);
+            flex-shrink: 0;
+        }
+
+        .search-form {
+            max-width: 800px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        .search-input-container {
+            display: flex;
+            gap: 10px;
+            background: #1F2937;
+            padding: 12px;
+            border-radius: 12px;
+            border: 2px solid #374151;
+            transition: border-color 0.2s;
+        }
+
+        .search-input-container:focus-within {
+            border-color: #4F46E5;
+        }
+
+        .search-input {
+            flex: 1;
+            border: none;
+            padding: 10px;
+            font-size: 16px;
+            outline: none;
+            resize: none;
+            line-height: 1.2;
+            max-height: 150px;
+            overflow-y: auto;
+            background: transparent;
+            color: #D1D5DB;
+        }
+
+        .search-controls {
+            display: flex;
+            gap: 10px;
+            align-items: flex-end;
+        }
+
+        select {
+            padding: 8px 12px;
+            border: 1px solid #374151;
+            border-radius: 8px;
+            outline: none;
+            height: 40px;
+            background: #1F2937;
+            color: #D1D5DB;
+            cursor: pointer;
+            appearance: none;
+        }
+
+        button {
+            background: #4F46E5;
+            color: white;
+            border: none;
+            padding: 8px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.2s;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 500;
+        }
+
+        button:hover {
+            background: #4338CA;
+        }
+
+        .typing-indicator {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            margin-top: 5px;
+        }
+
+        .typing-indicator span {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background-color: #9CA3AF;
+            border-radius: 50%;
+            animation: typing 1s infinite ease-in-out;
+        }
+
+        .typing-indicator span:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+
+        .typing-indicator span:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes typing {
+            0%, 60%, 100% { transform: translateY(0); }
+            30% { transform: translateY(-5px); }
+        }
+
+        @media (max-width: 768px) {
+            .app-container {
+                grid-template-columns: 1fr;
+            }
+
+            .sidebar {
+                display: none;
+            }
+
+            .message {
+                max-width: 90%;
+            }
+        }
+
+        /* 메시지 내 코드 블록 및 인용문 스타일링 */
+        pre {
+            background: #1F2937;
+            padding: 10px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 14px;
+            color: #E5E7EB;
+        }
+
+        blockquote {
+            border-left: 4px solid #4F46E5;
+            padding-left: 10px;
+            color: #A1A1AA;
+            margin: 10px 0;
+            font-style: italic;
+        }
+
+        .search-results {
+            margin-top: 15px;
+            padding: 15px;
+            background: #1F2937;
+            border-radius: 8px;
+            border: 1px solid #374151;
+        }
+
+        .search-result-item {
+            margin-bottom: 15px;
+        }
+
+        .search-result-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .search-result-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #60A5FA;
+            margin-bottom: 5px;
+            text-decoration: none;
+        }
+
+        .search-result-title:hover {
+            text-decoration: underline;
+        }
+
+        .search-result-snippet {
+            font-size: 14px;
+            color: #D1D5DB;
+            line-height: 1.5;
+        }
+
+        .search-links {
+            margin-top: 10px;
+            text-align: center;
+        }
+
+        .search-link-item {
+            display: inline-block;
+            background: #4F46E5;
+            color: #F9FAFB;
+            padding: 8px 12px;
+            margin: 5px;
+            border-radius: 8px;
+            font-weight: 600;
+            text-decoration: none;
+            transition: background 0.2s;
+        }
+
+        .search-link-item:hover {
+            background: #4338CA;
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <aside class="sidebar">
+            <div class="sidebar-section">
+                <h2 class="sidebar-title">
+                    <i class="fas fa-images"></i> 관련 이미지
+                </h2>
+                <div class="media-grid" id="imageGrid">
+                    <!-- 이미지 아이템들이 여기에 동적으로 추가됩니다 -->
+                </div>
+            </div>
+            <div class="sidebar-section">
+                <h2 class="sidebar-title">
+                    <i class="fas fa-video"></i> 관련 동영상
+                </h2>
+                <div class="media-grid" id="videoGrid">
+                    <!-- 동영상 아이템들이 여기에 동적으로 추가됩니다 -->
+                </div>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <header class="header">
+                <h1><i class="fas fa-robot"></i> AI 검색 챗봇</h1>
+            </header>
+
+            <div class="chat-container" id="chatContainer">
+                <!-- 채팅 메시지들이 여기에 동적으로 추가됩니다 -->
+            </div>
+
+            <div class="input-container">
+                <form class="search-form" id="searchForm" aria-label="검색 폼">
+                    <div class="search-input-container">
+                        <textarea 
+                            class="search-input" 
+                            placeholder="질문을 입력하세요" 
+                            required
+                            rows="1"
+                            aria-label="질문 입력"
+                        ></textarea>
+                        <div class="search-controls">
+                            <select id="modelSelect" aria-label="모델 선택">
+                                <option value="ChatGPT">ChatGPT</option>
+                                <option value="Gemini">Gemini</option>
+                            </select>
+                            <button type="submit" aria-label="전송">
+                                <i class="fas fa-paper-plane"></i>
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </main>
+    </div>
+
+    <!-- Marked.js를 이용한 Markdown 파서 추가 -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // 주요 요소 참조
+            const textarea = document.querySelector('.search-input');
+            const form = document.getElementById('searchForm');
+            const chatContainer = document.getElementById('chatContainer');
+            const imageGrid = document.getElementById('imageGrid');
+            const videoGrid = document.getElementById('videoGrid');
+
+            // 텍스트 영역 자동 크기 조절 (디바운싱 적용)
+            let resizeTimeout;
+            textarea.addEventListener('input', function() {
+                clearTimeout(resizeTimeout);
+                resizeTimeout = setTimeout(() => {
+                    textarea.style.height = 'auto';
+                    textarea.style.height = `${textarea.scrollHeight}px`;
+                }, 100);
+            });
+
+            // 엔터 키 처리
+            textarea.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    if (textarea.value.trim()) {
+                        form.dispatchEvent(new Event('submit'));
+                    }
+                }
+            });
+
+            // 메시지 추가 함수
+            function addMessage(type, content, isLoading = false) {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `message ${type}-message`;
+
+                if (isLoading) {
+                    const typingIndicator = document.createElement('div');
+                    typingIndicator.className = 'typing-indicator';
+                    typingIndicator.innerHTML = '<span></span><span></span><span></span>';
+                    messageDiv.appendChild(typingIndicator);
+                } else {
+                    // Marked.js 설정: XSS 방지를 위해 sanitize 옵션 활성화
+                    messageDiv.innerHTML = marked.parse(content, { sanitize: true });
+                }
+
+                chatContainer.appendChild(messageDiv);
+                chatContainer.scrollTop = chatContainer.scrollHeight;
+
+                return messageDiv;
+            }
+
+            // 메시지 전송 처리
+            let lastMessageContent = '';
+            let isProcessing = false;
+
+            async function sendMessage(message, modelChoice) {
+                if (isProcessing) return;
+
+                isProcessing = true;
+                lastMessageContent = message;
+
+                // 사용자 메시지 추가
+                addMessage('user', message);
+                textarea.value = '';
+                textarea.style.height = 'auto';
+
+                // AI 메시지 로딩 중 표시
+                const aiMessageDiv = addMessage('ai', '', true);
+
+                try {
+                    const response = await fetch('/', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                        },
+                        body: new URLSearchParams({
+                            query: message,
+                            model: modelChoice
+                        })
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+
+                    const reader = response.body.getReader();
+                    const decoder = new TextDecoder();
+                    let done = false;
+                    let aiResponse = '';
+                    let isFirstChunk = true;
+                    let links = [];
+
+                    while (!done) {
+                        const { value, done: readerDone } = await reader.read();
+                        if (value) {
+                            const chunk = decoder.decode(value, { stream: true });
+
+                            // 첫 번째 청크인지 확인
+                            if (isFirstChunk) {
+                                // 로딩 애니메이션 제거
+                                const typingIndicator = aiMessageDiv.querySelector('.typing-indicator');
+                                if (typingIndicator) {
+                                    typingIndicator.remove();
+                                }
+                                isFirstChunk = false;
+                            }
+
+                            if (chunk.startsWith('{"image_results":')) {
+                                // JSON 데이터 확인 및 처리
+                                const jsonData = JSON.parse(chunk);
+                                // 이미지 및 동영상 업데이트
+                                updateMediaSidebar(jsonData.image_results, jsonData.video_results);
+                                // 검색 결과 업데이트
+                                updateSearchResults(aiMessageDiv, jsonData.search_results);
+                                // 링크 업데이트
+                                links = jsonData.search_results;
+                            } else {
+                                // AI 응답 텍스트 누적 및 실시간 업데이트
+                                aiResponse += chunk;
+                                aiMessageDiv.innerHTML = marked.parse(aiResponse, { sanitize: true });
+                            }
+                        }
+                        done = readerDone;
+                    }
+
+                    // 링크 목록 추가
+                    if (links.length > 0) {
+                        const linksDiv = document.createElement('div');
+                        linksDiv.className = 'search-links';
+
+                        links.forEach((link, index) => {
+                            const linkElement = document.createElement('a');
+                            linkElement.className = 'search-link-item';
+                            linkElement.href = link.link;
+                            linkElement.target = '_blank';
+                            linkElement.rel = 'noopener noreferrer';
+                            linkElement.textContent = `${index + 1}`;
+                            linksDiv.appendChild(linkElement);
+                        });
+
+                        aiMessageDiv.appendChild(linksDiv);
+                    }
+
+                } catch (error) {
+                    console.error('Error during message sending:', error);
+                    aiMessageDiv.remove();
+                    addMessage('ai', '메시지 전송 중 오류가 발생했습니다. 다시 시도해 주세요.');
+                } finally {
+                    isProcessing = false;
+                }
+            }
+
+            // 폼 제출 처리
+            form.addEventListener('submit', function(e) {
+                e.preventDefault();
+
+                const message = textarea.value.trim();
+                const modelChoice = document.getElementById('modelSelect').value;
+
+                if (message) {
+                    sendMessage(message, modelChoice);
+                }
+            });
+
+            // 미디어 사이드바 업데이트 함수
+            function updateMediaSidebar(images, videos) {
+                const fragmentImages = document.createDocumentFragment();
+                const fragmentVideos = document.createDocumentFragment();
+
+                // 이미지 업데이트
+                imageGrid.innerHTML = ''; // 기존 콘텐츠 초기화
+                if (images && images.length > 0) {
+                    images.slice(0, 6).forEach(image => {
+                        const mediaItem = document.createElement('div');
+                        mediaItem.className = 'media-item';
+
+                        const link = document.createElement('a');
+                        link.href = escapeHTML(image.link);
+                        link.target = '_blank';
+                        link.rel = 'noopener noreferrer';
+
+                        const img = document.createElement('img');
+                        img.src = escapeHTML(image.thumbnail);
+                        img.alt = escapeHTML(image.title);
+                        img.loading = 'lazy';
+                        img.onerror = function() {
+                            this.onerror = null;
+                            this.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGQAAABkCAYAAABw4pVUAAAAKUlEQVR4AewaftIAAAAASUVORK5CYII=';
+                        };
+
+                        link.appendChild(img);
+                        mediaItem.appendChild(link);
+                        fragmentImages.appendChild(mediaItem);
+                    });
+                    imageGrid.appendChild(fragmentImages);
+                } else {
+                    imageGrid.innerHTML = '<p>관련 이미지가 없습니다.</p>';
+                }
+
+                // 동영상 업데이트
+                videoGrid.innerHTML = ''; // 기존 콘텐츠 초기화
+                if (videos && videos.length > 0) {
+                    videos.slice(0, 6).forEach(video => {
+                        const mediaItem = document.createElement('div');
+                        mediaItem.className = 'media-item';
+
+                        const link = document.createElement('a');
+                        link.href = escapeHTML(video.link);
+                        link.target = '_blank';
+                        link.rel = 'noopener noreferrer';
+
+                        const img = document.createElement('img');
+                        img.src = escapeHTML(video.thumbnail);
+                        img.alt = escapeHTML(video.title);
+                        img.loading = 'lazy';
+                        img.onerror = function() {
+                            this.onerror = null;
+                            this.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGQAAABkCAYAAABw4pVUAAAAKUlEQVR4AewaftIAAAAASUVORK5CYII=';
+                        };
+
+                        link.appendChild(img);
+                        mediaItem.appendChild(link);
+                        fragmentVideos.appendChild(mediaItem);
+                    });
+                    videoGrid.appendChild(fragmentVideos);
+                } else {
+                    videoGrid.innerHTML = '<p>관련 동영상이 없습니다.</p>';
+                }
+            }
+
+            // 검색 결과 업데이트 함수
+            function updateSearchResults(aiMessageDiv, searchResults) {
+                const existingResults = aiMessageDiv.querySelector('.search-results');
+                if (existingResults) {
+                    existingResults.remove();
+                }
+                
+                if (searchResults && searchResults.length > 0) {
+                    const searchResultsDiv = document.createElement('div');
+                    searchResultsDiv.className = 'search-results';
+
+                    const fragmentResults = document.createDocumentFragment();
+
+                    searchResults.forEach(result => {
+                        const itemDiv = document.createElement('div');
+                        itemDiv.className = 'search-result-item';
+
+                        const titleLink = document.createElement('a');
+                        titleLink.className = 'search-result-title';
+                        titleLink.href = result.link;
+                        titleLink.target = '_blank';
+                        titleLink.rel = 'noopener noreferrer';
+                        titleLink.textContent = result.title || 'No Title';
+
+                        const snippetP = document.createElement('p');
+                        snippetP.className = 'search-result-snippet';
+                        snippetP.textContent = result.snippet || 'No Snippet';
+
+                        itemDiv.appendChild(titleLink);
+                        itemDiv.appendChild(snippetP);
+                        fragmentResults.appendChild(itemDiv);
+                    });
+
+                    searchResultsDiv.appendChild(fragmentResults);
+                    aiMessageDiv.appendChild(searchResultsDiv);
+                    chatContainer.scrollTop = chatContainer.scrollHeight;
+                }
+            }
+
+            // HTML 이스케이프 함수
+            function escapeHTML(str) {
+                const div = document.createElement('div');
+                div.textContent = str;
+                return div.innerHTML;
+            }
+
+            // 초기 메시지 추가
+            addMessage('ai', '안녕하세요! 무엇을 도와드릴까요?');
+        });
+    </script>
+</body>
+</html>
