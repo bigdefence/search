@@ -1,5 +1,9 @@
 # AI 기반 검색 엔진
 
+## 이미지
+![스크린샷 2024-12-18 134359](https://github.com/user-attachments/assets/deda8f5c-d058-4dca-9ea7-c0e457779802)
+
+
 ## 프로젝트 개요
 이 프로젝트는 Flask 기반의 웹 애플리케이션으로, OpenAI와 Gemini AI 모델을 활용한 AI 검색 엔진입니다. 사용자는 검색어를 입력하면, Google 및 Naver의 검색 결과를 실시간으로 받아와 AI 모델을 통해 종합적인 답변을 제공합니다. 자연어 처리, BM25, FAISS, ElasticSearch,Sentence Transformer를 결합하여 검색 결과를 분석하고, 클릭 데이터를 기반으로 결과를 최적화합니다.
 
